@@ -1,4 +1,4 @@
-/* Copyright 2015 The TensorFlow Authors. All Rights Reserved.
+/* Copyright 2017 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,19 +14,28 @@ limitations under the License.
 ==============================================================================*/
 
 #include "tensorflow/core/framework/variant.h"
+
+#include "tensorflow/core/framework/tensor.pb.h"
 #include "tensorflow/core/framework/variant_encode_decode.h"
-#include "tensorflow/core/framework/variant_tensor_data.h"
-#include "tensorflow/core/lib/core/errors.h"
-#include "tensorflow/core/lib/gtl/map_util.h"
+#include "tensorflow/core/framework/variant_op_registry.h"
 
 namespace tensorflow {
+
+Variant::~Variant() { ResetMemory(); }
+
+bool Variant::Decode(VariantTensorData data) {
+  if (!is_empty()) {
+    return GetValue()->Decode(std::move(data));
+  }
+  return true;
+}
 
 template <>
 void* Variant::get() {
   if (is_empty()) {
     return nullptr;
   }
-  return value_->RawPtr();
+  return GetValue()->RawPtr();
 }
 
 template <>
@@ -34,35 +43,69 @@ const void* Variant::get() const {
   if (is_empty()) {
     return nullptr;
   }
-  return value_->RawPtr();
-}
-
-
-template <>
-string TypeNameVariant(const VariantTensorDataProto& value) {
-    return value.GetTypeName();
+  return GetValue()->RawPtr();
 }
 
 template <>
-void EncodeVariant(const VariantTensorDataProto& value, VariantTensorData* data) {
-    data->FromProto(value);
+std::string TypeNameVariant(const VariantTensorDataProto& value) {
+  return value.type_name();
 }
 
 template <>
-bool DecodeVariant(const VariantTensorData& data,
-                                      VariantTensorDataProto* value) {
-    data.ToProto(value);
-      return true;
+bool EncodeVariant(const VariantTensorDataProto& value,
+                   VariantTensorData* data) {
+  return data->FromConstProto(value);
 }
 
 template <>
-void EncodeVariant(const VariantTensorDataProto& value, string* buf) {
-    value.SerializeToString(buf);
+bool DecodeVariant(VariantTensorData* data, VariantTensorDataProto* value) {
+  return data->ToProto(value);
 }
 
 template <>
-bool DecodeVariant(const string& buf, VariantTensorDataProto* value) {
-    return value->ParseFromString(buf);
+bool EncodeVariant(const VariantTensorDataProto& value, std::string* buf) {
+  return value.SerializeToString(buf);
+}
+
+template <>
+bool DecodeVariant(std::string* buf, VariantTensorDataProto* value) {
+  return value->ParseFromString(*buf);
+}
+
+bool EncodeVariantList(const Variant* variant_array, int64_t n,
+                       std::unique_ptr<port::StringListEncoder> e) {
+  for (int i = 0; i < n; ++i) {
+    std::string s;
+    if (!variant_array[i].Encode(&s)) return false;
+    e->Append(s);
+  }
+  e->Finalize();
+  return true;
+}
+
+bool DecodeVariantList(std::unique_ptr<port::StringListDecoder> d,
+                       Variant* variant_array, int64_t n) {
+  std::vector<uint32_t> sizes(n);
+  if (!d->ReadSizes(&sizes)) return false;
+
+  for (int i = 0; i < n; ++i) {
+    if (variant_array[i].is_empty()) {
+      variant_array[i] = VariantTensorDataProto();
+    }
+    // TODO(ebrevdo): Replace with StringPiece?  Any way to make this a
+    // zero-copy operation that keeps a reference to the data in d?
+    std::string str(d->Data(sizes[i]), sizes[i]);
+    if (!variant_array[i].Decode(std::move(str))) return false;
+    const std::string variant_type_name = variant_array[i].TypeName();
+    if (!DecodeUnaryVariant(&variant_array[i])) {
+      LOG(ERROR) << "Could not decode variant with type_name: \""
+                 << variant_type_name
+                 << "\".  Perhaps you forgot to register a "
+                    "decoder via REGISTER_UNARY_VARIANT_DECODE_FUNCTION?";
+      return false;
+    }
+  }
+  return true;
 }
 
 }  // end namespace tensorflow

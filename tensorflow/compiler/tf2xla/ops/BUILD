@@ -1,55 +1,75 @@
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("@xla//third_party/rules_python/python:py_library.bzl", "py_library")
+load(
+    "//tensorflow:tensorflow.bzl",
+    "tf_custom_op_library",
+    "tf_gen_op_wrapper_py",
+)
+load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
+
 package(
-    default_visibility = ["//tensorflow/compiler/tf2xla:internal"],
-)
-
-licenses(["notice"])  # Apache 2.0
-
-load("//tensorflow:tensorflow.bzl", "tf_gen_op_wrapper_py")
-
-cc_library(
-    name = "functional_ops",
-    srcs = ["functional_ops.cc"],
-    deps = [
-        "//tensorflow/core:framework",
-    ],
-    alwayslink = 1,
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
+    default_visibility = ["//tensorflow:internal"],
+    licenses = ["notice"],
 )
 
 cc_library(
-    name = "sendrecv_ops",
-    srcs = ["sendrecv_ops.cc"],
+    name = "xla_ops",
+    srcs = ["xla_ops.cc"],
     deps = [
         "//tensorflow/core:framework",
+        "//tensorflow/core:lib",
+        "//tensorflow/core:protos_all_cc",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@xla//xla:shape_util",
+        "@xla//xla:xla_data_proto_cc",
+        "@xla//xla/service:shape_inference",
     ],
     alwayslink = 1,
 )
 
 tf_gen_op_wrapper_py(
-    name = "gen_functional_ops",
-    out = "gen_functional_ops.py",
+    name = "gen_xla_ops",
+    out = "gen_xla_ops.py",
+    extra_py_deps = [
+        "//tensorflow/python:pywrap_tfe",
+        "//tensorflow/python/util:dispatch",
+        "//tensorflow/python/util:deprecation",
+        "//tensorflow/python/util:tf_export",
+    ],
+    py_lib_rule = py_library,
     deps = [
-        ":functional_ops",
+        ":xla_ops",
     ],
 )
 
-tf_gen_op_wrapper_py(
-    name = "gen_sendrecv_ops",
-    out = "gen_sendrecv_ops.py",
-    deps = [
-        ":sendrecv_ops",
+tf_custom_op_library(
+    name = "_xla_ops.so",
+    srcs = [
+        "xla_ops.cc",
     ],
-)
-
-# -----------------------------------------------------------------------------
-
-filegroup(
-    name = "all_files",
-    srcs = glob(
-        ["**/*"],
-        exclude = [
-            "**/METADATA",
-            "**/OWNERS",
-        ],
-    ),
-    visibility = ["//tensorflow:__subpackages__"],
+    deps = [
+        "@com_google_absl//absl/algorithm:container",
+        "@xla//xla:shape_util",
+        "@xla//xla:xla_data_proto_cc",
+        "@xla//xla/service:shape_inference",
+    ],
 )

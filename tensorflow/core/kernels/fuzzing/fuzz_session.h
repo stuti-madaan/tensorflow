@@ -13,10 +13,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef LEARNING_BRAIN_KERNELS_FUZZING_FUZZ_SESSION_H_
-#define LEARNING_BRAIN_KERNELS_FUZZING_FUZZ_SESSION_H_
+#ifndef TENSORFLOW_CORE_KERNELS_FUZZING_FUZZ_SESSION_H_
+#define TENSORFLOW_CORE_KERNELS_FUZZING_FUZZ_SESSION_H_
 
 #include "tensorflow/cc/framework/scope.h"
+#include "tensorflow/cc/ops/standard_ops.h"  // IWYU pragma: keep
 #include "tensorflow/core/graph/graph.h"
 #include "tensorflow/core/public/session.h"
 
@@ -35,12 +36,11 @@ limitations under the License.
 #endif
 
 // Standard builder for hooking one placeholder to one op.
-#define SINGLE_INPUT_OP_BUILDER(dtype, opName)                           \
-  void BuildGraph(const Scope& scope) override {                         \
-    auto op_node =                                                       \
-        tensorflow::ops::Placeholder(scope.WithOpName("input1"), dtype); \
-    std::ignore =                                                        \
-        tensorflow::ops::opName(scope.WithOpName("output"), op_node);    \
+#define SINGLE_INPUT_OP_BUILDER(dtype, opName)                          \
+  void BuildGraph(const Scope& scope) override {                        \
+    auto op_node =                                                      \
+        tensorflow::ops::Placeholder(scope.WithOpName("input"), dtype); \
+    (void)tensorflow::ops::opName(scope.WithOpName("output"), op_node); \
   }
 
 namespace tensorflow {
@@ -62,33 +62,33 @@ namespace fuzzing {
 //   SINGLE_INPUT_OP_BUILDER(DT_INT8, Identity);
 //   void FuzzImpl(const uint8_t* data, size_t size) {
 //      ... convert data and size to a Tensor, pass it to:
-//      RunOneInput(input_tensor);
+//      RunInputs({{"input", input_tensor}});
 //
 class FuzzSession {
  public:
   FuzzSession() : initialized_(false) {}
-  virtual ~FuzzSession() {}
+  virtual ~FuzzSession() = default;
 
   // Constructs a Graph using the supplied Scope.
   // By convention, the graph should have inputs named "input1", ...
   // "inputN", and one output node, named "output".
   // Users of FuzzSession should override this method to create their graph.
-  virtual void BuildGraph(const Scope& scope) {}
+  virtual void BuildGraph(const Scope& scope) = 0;
 
   // Implements the logic that converts an opaque byte buffer
   // from the fuzzer to Tensor inputs to the graph.  Users must override.
-  virtual void FuzzImpl(const uint8_t* data, size_t size) {}
+  virtual void FuzzImpl(const uint8_t* data, size_t size) = 0;
 
   // Initializes the FuzzSession.  Not safe for multithreading.
   // Separate init function because the call to virtual BuildGraphDef
   // can't be put into the constructor.
-  Status InitIfNeeded() {
+  absl::Status InitIfNeeded() {
     if (initialized_) {
-      return Status::OK();
+      return absl::OkStatus();
     }
     initialized_ = true;
 
-    Scope root = Scope::NewRootScope().ExitOnError();
+    Scope root = Scope::DisabledShapeInferenceScope().ExitOnError();
     SessionOptions options;
     session_ = std::unique_ptr<Session>(NewSession(options));
 
@@ -97,34 +97,37 @@ class FuzzSession {
     GraphDef graph_def;
     TF_CHECK_OK(root.ToGraphDef(&graph_def));
 
-    Status status = session_->Create(graph_def);
+    absl::Status status = session_->Create(graph_def);
     if (!status.ok()) {
       // This is FATAL, because this code is designed to fuzz an op
       // within a session.  Failure to create the session means we
       // can't send any data to the op.
-      LOG(FATAL) << "Could not create session: " << status.error_message();
+      LOG(FATAL) << "Could not create session: " << status.message();
     }
     return status;
   }
 
   // Runs the TF session by pulling on the "output" node, attaching
-  // the supplied input_tensor to the "input1" node, and discarding
+  // the supplied input_tensor to the input node(s), and discarding
   // any returned output.
-  Status RunOneInput(const Tensor& input_tensor) {
-    return session_->Run({{"input1", input_tensor}}, {}, {"output"}, nullptr);
+  // Note: We are ignoring Status from Run here since fuzzers don't need to
+  // check it (as that will slow them down and printing/logging is useless).
+  void RunInputs(const std::vector<std::pair<std::string, Tensor> >& inputs) {
+    RunInputsWithStatus(inputs).IgnoreError();
   }
 
-  Status RunTwoInputs(const Tensor& input1, const Tensor& input2) {
-    return session_->Run({{"input1", input1}, {"input2", input2}}, {},
-                         {"output"}, nullptr);
+  // Same as RunInputs but don't ignore status
+  absl::Status RunInputsWithStatus(
+      const std::vector<std::pair<std::string, Tensor> >& inputs) {
+    return session_->Run(inputs, {}, {"output"}, nullptr);
   }
 
   // Dispatches to FuzzImpl;  small amount of sugar to keep the code
   // of the per-op fuzzers tiny.
   int Fuzz(const uint8_t* data, size_t size) {
-    Status status = InitIfNeeded();
+    absl::Status status = InitIfNeeded();
     TF_CHECK_OK(status) << "Fuzzer graph initialization failed: "
-                        << status.error_message();
+                        << status.message();
     // No return value from fuzzing:  Success is defined as "did not
     // crash".  The actual application results are irrelevant.
     FuzzImpl(data, size);
@@ -143,14 +146,13 @@ class FuzzSession {
 class FuzzStringInputOp : public FuzzSession {
   void FuzzImpl(const uint8_t* data, size_t size) final {
     Tensor input_tensor(tensorflow::DT_STRING, TensorShape({}));
-    input_tensor.scalar<string>()() =
-        string(reinterpret_cast<const char*>(data), size);
-    // TODO(b/32704451): Don't just ignore the ::tensorflow::Status object!
-    RunOneInput(input_tensor).IgnoreError();
+    input_tensor.scalar<tstring>()() =
+        std::string(reinterpret_cast<const char*>(data), size);
+    RunInputs({{"input", input_tensor}});
   }
 };
 
 }  // end namespace fuzzing
 }  // end namespace tensorflow
 
-#endif  // LEARNING_BRAIN_KERNELS_FUZZING_FUZZ_SESSION_H_
+#endif  // TENSORFLOW_CORE_KERNELS_FUZZING_FUZZ_SESSION_H_

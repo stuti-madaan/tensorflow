@@ -1,27 +1,42 @@
+# Copyright 2026 The TensorFlow Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("//tensorflow:tensorflow.default.bzl", "tf_gen_op_wrapper_cc")
+load("//tensorflow/core/platform:rules_cc.bzl", "cc_library")
+
 package(
-    default_visibility = ["//tensorflow/compiler/tf2xla:internal"],
+    # copybara:uncomment default_applicable_licenses = ["//tensorflow:license"],
+    default_visibility = ["//tensorflow/compiler/tf2xla:friends"],
+    licenses = ["notice"],
 )
 
-licenses(["notice"])  # Apache 2.0
-
-load("//tensorflow:tensorflow.bzl", "tf_gen_op_wrapper_cc")
-
 tf_gen_op_wrapper_cc(
-    name = "functional_ops_gen",
-    include_internal_ops = 1,
-    out_ops_file = "ops/functional_ops",
-    deps = ["//tensorflow/compiler/tf2xla/ops:functional_ops"],
+    name = "xla_ops_gen",
+    out_ops_file = "ops/xla_ops",
+    deps = ["//tensorflow/compiler/tf2xla/ops:xla_ops"],
 )
 
 cc_library(
-    name = "functional_ops",
-    srcs = ["ops/functional_ops.cc"],
-    hdrs = ["ops/functional_ops.h"],
+    name = "xla_ops",
+    srcs = ["ops/xla_ops.cc"],
+    hdrs = ["ops/xla_ops.h"],
     deps = [
         "//tensorflow/cc:const_op",
         "//tensorflow/cc:ops",
         "//tensorflow/cc:scope",
-        "//tensorflow/compiler/tf2xla/ops:functional_ops",
+        "//tensorflow/compiler/tf2xla/ops:xla_ops",
         "//tensorflow/core:core_cpu",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
@@ -30,38 +45,24 @@ cc_library(
 )
 
 tf_gen_op_wrapper_cc(
-    name = "sendrecv_ops_gen",
+    name = "xla_jit_op_gen",
     include_internal_ops = 1,
-    out_ops_file = "ops/sendrecv_ops",
-    deps = ["//tensorflow/compiler/tf2xla/ops:sendrecv_ops"],
+    out_ops_file = "ops/xla_jit_ops",
+    deps = ["//tensorflow/compiler/jit/ops:xla_ops"],
 )
 
 cc_library(
-    name = "sendrecv_ops",
-    srcs = ["ops/sendrecv_ops.cc"],
-    hdrs = ["ops/sendrecv_ops.h"],
+    name = "xla_jit_ops",
+    srcs = ["ops/xla_jit_ops.cc"],
+    hdrs = ["ops/xla_jit_ops.h"],
     deps = [
         "//tensorflow/cc:const_op",
         "//tensorflow/cc:ops",
         "//tensorflow/cc:scope",
-        "//tensorflow/compiler/tf2xla/ops:sendrecv_ops",
+        "//tensorflow/compiler/jit/ops:xla_ops",
         "//tensorflow/core:core_cpu",
         "//tensorflow/core:framework",
         "//tensorflow/core:lib",
         "//tensorflow/core:protos_all_cc",
     ],
-)
-
-# -----------------------------------------------------------------------------
-
-filegroup(
-    name = "all_files",
-    srcs = glob(
-        ["**/*"],
-        exclude = [
-            "**/METADATA",
-            "**/OWNERS",
-        ],
-    ),
-    visibility = ["//tensorflow:__subpackages__"],
 )

@@ -1,4 +1,4 @@
-/* Copyright 2016 The TensorFlow Authors All Rights Reserved.
+/* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,9 +14,10 @@ limitations under the License.
 ==============================================================================*/
 // This checker checks common wrong configurations of operations.
 //
-#ifndef THIRD_PARTY_TENSORFLOW_CORE_PROFILER_INTERNAL_ADVISOR_OPERATION_CHECKER_H_
-#define THIRD_PARTY_TENSORFLOW_CORE_PROFILER_INTERNAL_ADVISOR_OPERATION_CHECKER_H_
+#ifndef TENSORFLOW_CORE_PROFILER_INTERNAL_ADVISOR_OPERATION_CHECKER_H_
+#define TENSORFLOW_CORE_PROFILER_INTERNAL_ADVISOR_OPERATION_CHECKER_H_
 
+#include "absl/strings/str_format.h"
 #include "tensorflow/core/profiler/internal/advisor/checker.h"
 
 namespace tensorflow {
@@ -24,14 +25,14 @@ namespace tfprof {
 
 class OperationChecker : public Checker {
  public:
-  string name() const override { return kCheckers[1]; }
+  std::string name() const override { return kCheckers[1]; }
 
  private:
   AdviceProto::Checker Check(const AdvisorOptionsProto::CheckerOption& options,
                              const TFStats* stats) override {
     if (!stats) {
-      fprintf(stderr, "Missing profiles (e.g. graph, run_meta). Skip %s\n",
-              name().c_str());
+      absl::FPrintF(
+          stderr, "Missing profiles (e.g. graph, run_meta). Skip %s\n", name());
       return reports_;
     }
     bool use_batch_norm = false;
@@ -45,9 +46,10 @@ class OperationChecker : public Checker {
       if (node->op_types().find("FusedBatchNorm") != node->op_types().end()) {
         use_fused_batch_norm = true;
       }
-      if (node->op_attrs().find("data_format") != node->op_attrs().end()) {
-        const AttrValue* attr_val = node->op_attrs().at("data_format");
-        if (attr_val->s() == "NHWC" &&
+
+      const AttrValue* attr = node->op_attrs("data_format");
+      if (attr) {
+        if (attr->s() == "NHWC" &&
             IsPlacedOnAccelerator(node->canonical_device())) {
           recommend_nchw = true;
         }
@@ -73,4 +75,4 @@ class OperationChecker : public Checker {
 }  // namespace tfprof
 }  // namespace tensorflow
 
-#endif  // THIRD_PARTY_TENSORFLOW_CORE_PROFILER_INTERNAL_ADVISOR_OPERATION_CHECKER_H_
+#endif  // TENSORFLOW_CORE_PROFILER_INTERNAL_ADVISOR_OPERATION_CHECKER_H_

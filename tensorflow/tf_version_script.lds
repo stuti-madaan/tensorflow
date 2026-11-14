@@ -1,8 +1,29 @@
 tensorflow {
   global:
     *tensorflow*;
+    *absl*kSeed*;
+    *toco*;
     *perftools*gputools*;
-    TF_*;
+    *tf_*;
+    *TF_*;
+    *Eager*;
+    *TFE_*;
+    *stream_executor*;
+    *xla*;
+    *PyInit_*;
+    *SE_*;
+    *SP_*;
+    *tsl*;
+    *lite*;
+    *TFL*;
+    *TfLite*;
+    *quantization*;
+    *mlir*detail*;
+    *mlir*func*;
+    *mlir*TF*;
+    *mlir*shape*;
+    *mlir*scf*;
+    *mlir*quant*;
   local:
     *;
 };

@@ -13,9 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 """A test lib that defines some models."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+import contextlib
 
 from tensorflow.python.framework import dtypes
 from tensorflow.python.ops import array_ops
@@ -27,7 +25,10 @@ from tensorflow.python.ops import rnn
 from tensorflow.python.ops import rnn_cell
 from tensorflow.python.ops import tensor_array_grad  # pylint: disable=unused-import
 from tensorflow.python.ops import variable_scope
+from tensorflow.python.profiler import model_analyzer
 from tensorflow.python.training import gradient_descent
+from tensorflow.python.util import _pywrap_tfprof as print_mdl
+from tensorflow.python.util import compat
 
 
 def BuildSmallModel():
@@ -67,7 +68,7 @@ def BuildFullModel():
   return sgd_op.minimize(loss)
 
 
-def BuildSplitableModel():
+def BuildSplittableModel():
   """Build a small model that can be run partially in each step."""
   image = array_ops.zeros([2, 6, 6, 3])
 
@@ -95,3 +96,18 @@ def SearchTFProfNode(node, name):
     r = SearchTFProfNode(c, name)
     if r: return r
   return None
+
+
+@contextlib.contextmanager
+def ProfilerFromFile(profile_file):
+  """Initialize a profiler from profile file."""
+  print_mdl.ProfilerFromFile(compat.as_bytes(profile_file))
+  profiler = model_analyzer.Profiler.__new__(model_analyzer.Profiler)
+  yield profiler
+  print_mdl.DeleteProfiler()
+
+
+def CheckAndRemoveDoc(profile):
+  assert 'Doc:' in profile
+  start_pos = profile.find('Profile:')
+  return profile[start_pos + 9:]

@@ -13,8 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef THIRD_PARTY_TENSORFLOW_CC_FRAMEWORK_SCOPE_INTERNAL_H_
-#define THIRD_PARTY_TENSORFLOW_CC_FRAMEWORK_SCOPE_INTERNAL_H_
+#ifndef TENSORFLOW_CC_FRAMEWORK_SCOPE_INTERNAL_H_
+#define TENSORFLOW_CC_FRAMEWORK_SCOPE_INTERNAL_H_
+
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #include "tensorflow/cc/framework/scope.h"
 
@@ -26,7 +32,10 @@ class ShapeRefiner;
 // graph, status, name_map, and refiner.
 // This is intended to enable the C API (which are used by other language
 // bindings) to create a Scope and access C++ functionality (i.e. gradients).
-Scope NewInternalScope(Graph* graph, Status* status, ShapeRefiner* refiner);
+//
+// Shape inference is disabled if `refiner` is nullptr.
+Scope NewInternalScope(Graph* graph, absl::Status* status,
+                       ShapeRefiner* refiner);
 
 class Scope::Impl {
  public:
@@ -34,14 +43,16 @@ class Scope::Impl {
   // name that has not been used so far in a scope will get no suffix. Later
   // uses of the same name will get suffixes _1, _2, _3, etc. Multiple scopes
   // can share the same NameMap. For instance, a new scope created using
-  // WithControlDependencies() should would share the same NameMap with the
-  // parent.
-  typedef std::unordered_map<string, int> NameMap;
+  // WithControlDependencies() would share the same NameMap with the parent.
+  typedef std::unordered_map<std::string, int> NameMap;
 
   Impl(const std::shared_ptr<Graph>& graph,
-       const std::shared_ptr<Status>& status,
+       const std::shared_ptr<absl::Status>& status,
        const std::shared_ptr<NameMap>& name_map,
        const std::shared_ptr<ShapeRefiner>& refiner);
+
+  const std::string& name() const { return name_; }
+  const std::vector<Operation>& control_deps() const { return control_deps_; }
 
  private:
   friend class Scope;
@@ -56,28 +67,35 @@ class Scope::Impl {
     enum class ExitOnError;
     enum class KernelLabel;
     enum class Colocate;
+    enum class AssignedDevice;
+    enum class XlaCluster;
   };
 
-  Impl(Graph* graph, Status* status, NameMap* name_map, ShapeRefiner* refiner);
-  Impl(const Scope& other, Tags::ScopeName, const string& name,
+  Impl(Graph* graph, absl::Status* status, NameMap* name_map,
+       ShapeRefiner* refiner, bool disable_shape_inference);
+  Impl(const Scope& other, Tags::ScopeName, const std::string& name,
        bool copy_names);
-  Impl(const Scope& other, Tags::OpName, const string& name,
-       const string& op_name);
+  Impl(const Scope& other, Tags::OpName, const std::string& name,
+       const std::string& op_name);
   Impl(const Scope& other, Tags::ControlDeps,
        std::vector<Operation> control_deps, bool clear_control_deps);
-  Impl(const Scope& other, Tags::Device, const string& device);
-  Impl(const Scope& other, Tags::SingleUseScope, const string& op_name);
+  Impl(const Scope& other, Tags::Device, const std::string& device);
+  Impl(const Scope& other, Tags::SingleUseScope, const std::string& op_name);
   Impl(const Scope& other, Tags::ExitOnError);
-  Impl(const Scope& other, Tags::KernelLabel, const string& kernel_label);
+  Impl(const Scope& other, Tags::KernelLabel, const std::string& kernel_label);
   Impl(const Scope& other, Tags::Colocate, const Operation& colocate_with_op,
        bool clear_colocations);
+  Impl(const Scope& other, Tags::AssignedDevice,
+       const std::string& assigned_device);
+  Impl(const Scope& other, Tags::XlaCluster, const std::string& xla_cluster);
 
-  std::unordered_set<string> GetColocationConstraints(
+  std::unordered_set<std::string> GetColocationConstraints(
       const Operation& colocate_with_op) const;
 
   // Helper functions to get a unique names.
-  string GetUniqueName(const string& prefix, bool check_single_use) const;
-  string GetNameForOp(const string& default_name) const;
+  std::string GetUniqueName(const std::string& prefix,
+                            bool check_single_use) const;
+  std::string GetNameForOp(const std::string& default_name) const;
 
   bool single_use_scope() const { return scope_used_ != nullptr; }
 
@@ -86,7 +104,7 @@ class Scope::Impl {
   // Scope::NewRootScope function, which creates a new graph, a new status and
   // the name maps.
   std::shared_ptr<Graph> graph_ = nullptr;
-  std::shared_ptr<Status> status_ = nullptr;
+  std::shared_ptr<absl::Status> status_ = nullptr;
   std::shared_ptr<NameMap> name_map_ = nullptr;
   std::shared_ptr<ShapeRefiner> refiner_ = nullptr;
 
@@ -97,14 +115,22 @@ class Scope::Impl {
 
   const std::vector<Operation> control_deps_;
 
-  const string name_ = "";
-  const string op_name_ = "";
+  // The fully-qualified name of this scope (i.e. includes any parent scope
+  // names).
+  const std::string name_ = "";
+  const std::string op_name_ = "";
   const bool exit_on_error_ = false;
-  const string kernel_label_ = "";
-  const string device_ = "";
-  const std::unordered_set<string> colocation_constraints_;
+  const std::string kernel_label_ = "";
+  const std::string device_ = "";
+  const std::string assigned_device_ = "";
+  const std::string xla_cluster_ = "";
+  const std::unordered_set<std::string> colocation_constraints_;
+
+  // If true, Scope::DoShapeInference() always returns Status:OK().
+  // TODO(skyewm): remove this when possible
+  const bool disable_shape_inference_;
 };
 
 }  // namespace tensorflow
 
-#endif  // THIRD_PARTY_TENSORFLOW_CC_FRAMEWORK_SCOPE_INTERNAL_H_
+#endif  // TENSORFLOW_CC_FRAMEWORK_SCOPE_INTERNAL_H_

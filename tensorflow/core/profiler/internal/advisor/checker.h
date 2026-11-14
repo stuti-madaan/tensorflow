@@ -1,4 +1,4 @@
-/* Copyright 2016 The TensorFlow Authors All Rights Reserved.
+/* Copyright 2016 The TensorFlow Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,10 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef THIRD_PARTY_TENSORFLOW_CORE_PROFILER_INTERNAL_ADVISOR_CHECKER_H_
-#define THIRD_PARTY_TENSORFLOW_CORE_PROFILER_INTERNAL_ADVISOR_CHECKER_H_
+#ifndef TENSORFLOW_CORE_PROFILER_INTERNAL_ADVISOR_CHECKER_H_
+#define TENSORFLOW_CORE_PROFILER_INTERNAL_ADVISOR_CHECKER_H_
 
-#include "tensorflow/core/lib/strings/str_util.h"
 #include "tensorflow/core/profiler/internal/tfprof_stats.h"
 #include "tensorflow/core/profiler/tfprof_options.pb.h"
 
@@ -32,9 +31,9 @@ static const char* const kCheckers[] = {
 
 class Checker {
  public:
-  virtual ~Checker() {}
+  virtual ~Checker() = default;
 
-  virtual string name() const = 0;
+  virtual std::string name() const = 0;
 
   AdviceProto::Checker Run(const AdvisorOptionsProto::CheckerOption& options,
                            const TFStats* stats) {
@@ -49,4 +48,4 @@ class Checker {
 }  // namespace tfprof
 }  // namespace tensorflow
 
-#endif  // THIRD_PARTY_TENSORFLOW_CORE_PROFILER_INTERNAL_ADVISOR_CHECKER_H_
+#endif  // TENSORFLOW_CORE_PROFILER_INTERNAL_ADVISOR_CHECKER_H_
